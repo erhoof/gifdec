@@ -159,7 +159,7 @@ gd_open_gif(const char *fname)
     /* Aspect Ratio */
     read(fd, &aspect, 1);
     /* Create gd_GIF Structure. */
-    gif = (gd_GIF *)calloc(1, sizeof(*gif));
+    gif = calloc(1, sizeof(*gif));
     if (!gif) goto fail;
     gif->fd = fd;
     gif->width  = width;
@@ -170,7 +170,7 @@ gd_open_gif(const char *fname)
     read(fd, gif->gct.colors, 3 * gif->gct.size);
     gif->palette = &gif->gct;
     gif->bgindex = bgidx;
-    gif->frame = (uint8_t *)calloc(4, width * height);
+    gif->frame = calloc(4, width * height);
     if (!gif->frame) {
         free(gif);
         goto fail;
@@ -315,7 +315,7 @@ new_table(int key_size)
 {
     int key;
     int init_bulk = MAX(1 << (key_size + 1), 0x100);
-    Table *table = (Table *)malloc(sizeof(*table) + sizeof(Entry) * init_bulk);
+    Table *table = malloc(sizeof(*table) + sizeof(Entry) * init_bulk);
     if (table) {
         table->bulk = init_bulk;
         table->nentries = (1 << key_size) + 2;
@@ -336,7 +336,7 @@ add_entry(Table **tablep, uint16_t length, uint16_t prefix, uint8_t suffix)
     Table *table = *tablep;
     if (table->nentries == table->bulk) {
         table->bulk *= 2;
-        table = (Table *)realloc(table, sizeof(*table) + sizeof(Entry) * table->bulk);
+        table = realloc(table, sizeof(*table) + sizeof(Entry) * table->bulk);
         if (!table) return -1;
         table->entries = (Entry *) &table[1];
         *tablep = table;
