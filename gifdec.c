@@ -13,6 +13,79 @@
 #include <unistd.h>
 #endif
 
+#ifdef USE_ALLOCATED_SPACE
+uint8_t *emu_memory;
+size_t emu_offset;
+size_t emu_size;
+
+int emu_open(const char *path, int) {
+    emu_memory = NULL;
+    emu_offset = 0;
+    emu_size = 0;
+
+    FILE *f = fopen(path, "rb");
+    fseek(f, 0, SEEK_END);
+    emu_size = ftell(f);
+    fseek(f, 0, SEEK_SET);  /* same as rewind(f); */
+
+    emu_memory = (uint8_t *)malloc(emu_size + 1);
+    if(!emu_memory) {
+        return -1;
+    }
+
+    fread(emu_memory, emu_size, 1, f);
+    fclose(f);
+
+    return 1;
+}
+
+int emu_close(int) {
+    if(emu_memory) {
+        free(emu_memory);
+    }
+    return 0;
+}
+
+int emu_read(int, void *buffer, size_t len) {
+    if(!emu_memory) {
+        return -1;
+    }
+
+    size_t read_length = ((emu_size - 1) < emu_offset + len) ? emu_size - emu_offset : len;
+    memcpy(buffer, emu_memory + emu_offset, read_length);
+    emu_offset += read_length;
+    return read_length;
+}
+
+int emu_lseek(int, size_t value, int type) {
+    size_t last_offset = emu_offset;
+
+    switch(type) {
+    case SEEK_SET:
+        emu_offset = value;
+        break;
+    case SEEK_CUR:
+        emu_offset += value;
+        break;
+    case SEEK_END:
+        emu_offset = emu_size - 1;
+        break;
+    }
+
+    if(emu_offset >= emu_size) {
+        emu_offset = last_offset;
+        return -1;
+    }
+
+    return emu_offset;
+}
+
+#define read emu_read
+#define lseek emu_lseek
+#define open emu_open
+#define close emu_close
+#endif 
+
 #define MIN(A, B) ((A) < (B) ? (A) : (B))
 #define MAX(A, B) ((A) > (B) ? (A) : (B))
 
@@ -86,7 +159,7 @@ gd_open_gif(const char *fname)
     /* Aspect Ratio */
     read(fd, &aspect, 1);
     /* Create gd_GIF Structure. */
-    gif = calloc(1, sizeof(*gif));
+    gif = (gd_GIF *)calloc(1, sizeof(*gif));
     if (!gif) goto fail;
     gif->fd = fd;
     gif->width  = width;
@@ -97,7 +170,7 @@ gd_open_gif(const char *fname)
     read(fd, gif->gct.colors, 3 * gif->gct.size);
     gif->palette = &gif->gct;
     gif->bgindex = bgidx;
-    gif->frame = calloc(4, width * height);
+    gif->frame = (uint8_t *)calloc(4, width * height);
     if (!gif->frame) {
         free(gif);
         goto fail;
@@ -242,7 +315,7 @@ new_table(int key_size)
 {
     int key;
     int init_bulk = MAX(1 << (key_size + 1), 0x100);
-    Table *table = malloc(sizeof(*table) + sizeof(Entry) * init_bulk);
+    Table *table = (Table *)malloc(sizeof(*table) + sizeof(Entry) * init_bulk);
     if (table) {
         table->bulk = init_bulk;
         table->nentries = (1 << key_size) + 2;
@@ -263,7 +336,7 @@ add_entry(Table **tablep, uint16_t length, uint16_t prefix, uint8_t suffix)
     Table *table = *tablep;
     if (table->nentries == table->bulk) {
         table->bulk *= 2;
-        table = realloc(table, sizeof(*table) + sizeof(Entry) * table->bulk);
+        table = (Table *)realloc(table, sizeof(*table) + sizeof(Entry) * table->bulk);
         if (!table) return -1;
         table->entries = (Entry *) &table[1];
         *tablep = table;
